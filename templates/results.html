@@ -1,0 +1,24 @@
+{% extends "layout.html" %}
+
+{% block page_title %}gplus archiver{% endblock %}
+
+{% block body %}
+
+<li class=".post">
+    <h2 class="post-list__post-title post-title"><a href="{{ item['url'] }}" title="{{ item['title'] }}"
+                                                    target="_blank">{{ item['title'] }}</a></h2>
+    <p class="excerpt">${object.content}&hellip;</p>
+    <div class=post-list__meta>
+        <strong>[${access.description}]</strong>
+        &#8226; <span class="post-meta__tags">${object.plusoners.totalItems} <strong><em>+1<sup>s</sup></em></strong>
+				| ${object.replies.totalItems} <strong><em>Replies</em></strong></span>
+
+    </div>
+    <div class="post-list__meta">
+        <time datetime="{{ item['published'] }}" class="post-list__meta--date date">{{ item['published'] }}</time>
+        &#8226; <span class="post-meta__tags">by <a href="${actor.url}" target="_blank">${actor.displayName}</a></span>
+    </div>
+    <hr class="post-list__divider">
+</li>
+
+{% endblock %}
