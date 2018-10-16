@@ -4,21 +4,45 @@
 
 {% block body %}
 
+{#
+title
+published
+updated
+url
+object.actor.displayName
+object.actor.image
+object.actor.image.url
+object.content
+object.originalContent
+object.replies
+object.plusoners
+object.resharers
+object.attachments[]
+object.attachments[].objectType
+object.attachments[].displayName
+object.attachments[].content
+object.attachments[].fullImage
+object.attachments[].embed
+#}
+
+{% for item in output %}
 <li class=".post">
-    <h2 class="post-list__post-title post-title"><a href="{{ item['url'] }}" title="{{ item['title'] }}"
-                                                    target="_blank">{{ item['title'] }}</a></h2>
-    <p class="excerpt">${object.content}&hellip;</p>
+    <h2 class="post-list__post-title post-title"><a href="{{ item.url }}" title="{{ item.title }}"
+                                                    target="_blank">{{ item.title }}</a></h2>
+    <p class="excerpt">{{ item.object.content | raw }}</p>
     <div class=post-list__meta>
-        <strong>[${access.description}]</strong>
-        &#8226; <span class="post-meta__tags">${object.plusoners.totalItems} <strong><em>+1<sup>s</sup></em></strong>
-				| ${object.replies.totalItems} <strong><em>Replies</em></strong></span>
+        <strong>[{{ item.access.description }}}</strong>
+        &#8226; <span
+            class="post-meta__tags">{{ item.object.plusoners.totalItems }} <strong><em>+1<sup>s</sup></em></strong>
+				| {{ item.object.replies.totalItems }} <strong><em>Replies</em></strong></span>
 
     </div>
     <div class="post-list__meta">
-        <time datetime="{{ item['published'] }}" class="post-list__meta--date date">{{ item['published'] }}</time>
-        &#8226; <span class="post-meta__tags">by <a href="${actor.url}" target="_blank">${actor.displayName}</a></span>
+        <time datetime="{{ item.published }}" class="post-list__meta--date date">{{ item.published }}</time>
+        &#8226; <span class="post-meta__tags">by <a href="{{ item.actor.url }}" target="_blank">{{ item.actor.displayName }}</a></span>
     </div>
     <hr class="post-list__divider">
 </li>
+{% endfor %}
 
 {% endblock %}

@@ -14,21 +14,11 @@ $config['displayErrorDetails'] = true;
 //$config['db']['pass']   = 'password';
 //$config['db']['dbname'] = 'exampleapp';
 
-# TODO: composer not auto-loading from lib/
-if (!defined('GAPI_API_KEY')) {
-    define('GAPI_API_KEY', 'AIzaSyAFcDZXBXqX6y2K9EHmv6v3-w2oTekPIRA');
-}
-
-if (!defined('GAPI_CLIENT_ID')) {
-    define('GAPI_CLIENT_ID', '872909385168-imn92ke4523o7g4q5a36np6394bk38qv.apps.googleusercontent.com');
-}
-
-if (!defined('GAPI_CLIENT_SECRET')) {
-    define('GAPI_CLIENT_SECRET', 'RA0fAKijwWGqyUwqGZ84Vqm6');
-}
+# Constants should be defined somewhere in lib/ folder (e.g. constants.php)
 $config['gapi_api_key'] = GAPI_API_KEY;
 $config['gapi_client_id'] = GAPI_CLIENT_ID;
 $config['gapi_client_secret'] = GAPI_CLIENT_SECRET;
+$config['archive_directory'] = ARCHIVE_DIRECTORY;
 
 $app = new \Slim\App(['settings' => $config]);
 
@@ -70,25 +60,66 @@ $container['logger'] = function ($c) {
  * Routes
  */
 $app->get('/', function (Request $request, Response $response, array $args) {
-    $this->logger->addInfo('Home');
 
-    $response = $this->view->render($response, 'index.html');
-//    return $this->view->render($response, 'profile.html', [
-//        'name' => $args['name']
-//    ]);
-    return $response;
-});
+    $communities = array();
+    $outDir = $this->get('settings')['archive_directory'] . DIRECTORY_SEPARATOR . 'jb1Xzanox6i8Zyse4DcYD8sZqy0'; //
+    if ($handle = opendir($outDir)) {
+        /* This is the correct way to loop over the directory. */
+        while (false !== ($entry = readdir($handle))) {
+            if ($entry != "." && $entry != "..") {
+                $community = array(
+                    'url' => "/archive/jb1Xzanox6i8Zyse4DcYD8sZqy0/$entry",
+                    'name' => $entry
+                );
+                array_push($communities, $community);
+            }
+        }
+        closedir($handle);
+    }
 
-$app->get('/hello/{name}', function (Request $request, Response $response, array $args) {
-    $name = $args['name'];
-    $response->getBody()->write("Hello, $name");
-
-    $this->logger->addInfo('Something interesting happened');
+    $response = $this->view->render($response, 'index.html', array('communities' => $communities));
 
     return $response;
 });
 
 $app->get('/test', function (Request $request, Response $response, array $args) {
+
+    $outDir = $this->get('settings')['archive_directory'] . DIRECTORY_SEPARATOR . 'jb1Xzanox6i8Zyse4DcYD8sZqy0'; //
+
+    $output = array();
+    if ($handle = opendir($outDir)) {
+        /* This is the correct way to loop over the directory. */
+        while (false !== ($entry = readdir($handle))) {
+            if ($entry != "." && $entry != "..") {
+                $obj = file_get_contents($outDir . DIRECTORY_SEPARATOR . $entry);
+                $obj = unserialize($obj);
+                //var_export($obj);
+                array_push($output, $obj);
+            }
+        }
+        closedir($handle);
+    }
+
+    $response = $this->view->render($response, 'results.html', array("output" => $output));
+
+    return $response;
+});
+
+$app->post('/csv', function (Request $request, Response $response, array $args) {
+
+    // E.g. https://plus.google.com/communities/116965157741523529510
+    if (!isset($_POST['communityId'])) {
+        $response->getBody()->write('You must supply a community ID.');
+        return $response->withStatus(400);
+    }
+
+    $url = parse_url($_POST['communityId'], PHP_URL_PATH);
+    $communityId = explode("/", $url)[2]; # /communities/116965157741523529510
+
+    if (!$communityId) {
+        $response->getBody()->write('You must supply a community ID.');
+        return $response->withStatus(400);
+    }
 
     $client = new Google_Client();
     $client->setApplicationName('gplus-archiver');
@@ -100,7 +131,6 @@ $app->get('/test', function (Request $request, Response $response, array $args) 
     # This is for API key
     $client->setDeveloperKey($this->get('settings')['gapi_api_key']);
 
-    #'http://gplus-archiver.local/test');
     $referer = (isset($_SERVER['HTTPS']) ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'];
     $client->setRedirectUri($referer);
     $client->setHttpClient(new \GuzzleHttp\Client(['headers' => ['referer' => $referer]]));
@@ -130,15 +160,7 @@ $app->get('/test', function (Request $request, Response $response, array $args) 
         pageToken	    string	            The continuation token, which is used to page through large result sets. To get the next page of results, set this parameter to the value of "nextPageToken" from the previous response. This token can be of any length.
      */
     # Set up a search for a community
-    $communityId = '116965157741523529510'; # TODO: load this from route args / form input
     $query = "in:$communityId";
-    $params = array(
-        'orderBy' => 'recent',   # best or recent
-        'maxResults' => '20',    # 20 max ...
-        'pageToken' => null
-    );
-    $results = $plus->activities->search($query, $params);
-
 
     /*
         Response
@@ -156,41 +178,75 @@ $app->get('/test', function (Request $request, Response $response, array $args) 
         etag	        etag	    ETag of this response for caching purposes.
      */
 
-    $outDir = "D:\webdev\gplus-archiver\archive";
+    $outDir = $this->get('settings')['archive_directory'];
     if (!is_dir($outDir)) {
         mkdir($outDir);
     }
-    //print('<pre>');
-    $output = array();
-    foreach ($results['items'] as $item) {
-        #print "Result: {$item['object']['content']}\n";
-        #var_export($item);
-//        print(json_encode($item));
-//        print(",\n");
-//        array_push($output, array(
-//            'url' => $item['url'],
-//            'title' => $item['title'],
-//            'published' => $item['published'],
-//            'actor' => $item['actor'],
-//            'access' => $item['access'],
-//            'object' => $item['object']
-//        ));
-        $outFile = str_replace('"', "", $item['etag']);
-        #$outFile = str_replace('/', "_", $outFile);
-        $outFile = explode('/', $outFile);
-        $tmpDir = $outDir . DIRECTORY_SEPARATOR . $outFile[0];
-        if (!is_dir($tmpDir)) {
-            mkdir($tmpDir);
-        }
-        $outFile = $tmpDir . DIRECTORY_SEPARATOR . $outFile[1] . ".phpobj";
 
-        if (!file_exists($outFile)) {
-            file_put_contents($outFile, serialize($item));
-        }
-
+    $csvFile = $outDir . DIRECTORY_SEPARATOR . "$communityId.csv";
+    if (file_exists($csvFile)) {
+        # read the last page token to pick up where we left off
+        $rows = file($csvFile);
+        $last_row = array_pop($rows);
+        $data = str_getcsv($last_row);
+        $pageToken = $data[0];
+    } else {
+        # new file
+        $pageToken = null;
     }
-    #var_export($results['items']);
-    //print('</pre>');
+
+    # This might take a while...
+    set_time_limit(10 * 60);
+    $fp = fopen($csvFile, 'a');  # w = write, a = append
+    try {
+        do {
+            $params = array(
+                'orderBy' => 'recent',   # best or recent
+                'maxResults' => '20',    # 20 max ...
+                'pageToken' => $pageToken
+            );
+            $results = $plus->activities->search($query, $params);
+
+            if (count($results['items']) == 0) {
+                # Known bug: https://code.google.com/archive/p/google-plus-platform/issues/406
+                $pageToken = null;
+            } else {
+                $pageToken = $results['nextPageToken'];
+                foreach ($results['items'] as $item) {
+
+                    # This will split the etag into directory + file
+                    // $outFile = str_replace('"', "", $item['etag']);
+                    // $outFile = explode('/', $outFile);
+                    // $tmpDir = $outDir . DIRECTORY_SEPARATOR . $outFile[0];
+                    // if (!is_dir($tmpDir)) {
+                    //     mkdir($tmpDir);
+                    // }
+                    // $outFile = $tmpDir . DIRECTORY_SEPARATOR . $outFile[1] . ".phpobj";
+                    //
+                    // # for now just serialize the object
+                    // if (!file_exists($outFile)) {
+                    //     file_put_contents($outFile, serialize($item));
+                    // }
+
+                    # Write a CSV file
+                    $row = array(
+                        $pageToken,
+                        #$item['etag'],
+                        $item['published'],
+                        #$item['actor'],
+                        $item['url']
+                    );
+
+                    fputcsv($fp, $row);
+                    // var_export($row);
+                }
+            }
+            #var_export($results['items']);
+            //print('</pre>');
+        } while (!is_null($pageToken));
+    } finally {
+        fclose($fp);
+    }
 
     #$response = $this->view->render($response, 'results.html', $output );
 

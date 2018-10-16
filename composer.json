@@ -18,8 +18,8 @@
     "google/apiclient": "2.x-dev"
   },
   "autoload": {
-    "psr-4": {
-      "": "lib/"
-    }
+    "files": [
+      "lib/secret.php"
+    ]
   }
 }
