@@ -30,3 +30,7 @@
 //if(!defined('ARCHIVE_DIRECTORY')) {
 //    define('ARCHIVE_DIRECTORY', '< path to filesystem >');
 //}
+
+//if(!defined('TIMEOUT_MINUTES')) {
+//    define('TIMEOUT_MINUTES', < number of minutes >);
+//}

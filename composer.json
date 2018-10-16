@@ -2,6 +2,7 @@
   "name": "wispsoftime/gplus-archiver",
   "description": "This app assists in exporting content from Google+.",
   "homepage": "https://wispsoftime.com/gplus-archiver",
+  "license": "",
   "authors": [
     {
       "name": "Spencer Salyer",
@@ -10,7 +11,7 @@
     }
   ],
   "require": {
-    "php": ">=5.6.0",
+    "php": ">=7.0.0",
     "slim/slim": "^3.0",
     "slim/twig-view": "^2.4",
     "slim/flash": "^0.4.0",
@@ -19,7 +20,8 @@
   },
   "autoload": {
     "files": [
-      "lib/secret.php"
+      "lib/secret.php",
+      "lib/GPlusArchiver.php"
     ]
   }
 }

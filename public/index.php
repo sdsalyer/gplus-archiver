@@ -3,7 +3,7 @@
 use \Psr\Http\Message\ServerRequestInterface as Request;
 use \Psr\Http\Message\ResponseInterface as Response;
 
-require '../vendor/autoload.php';
+require_once '../vendor/autoload.php';
 
 /*
  * Configuration
@@ -14,11 +14,12 @@ $config['displayErrorDetails'] = true;
 //$config['db']['pass']   = 'password';
 //$config['db']['dbname'] = 'exampleapp';
 
-# Constants should be defined somewhere in lib/ folder (e.g. constants.php)
+# Constants should be defined somewhere in lib/ folder (e.g. secret.php)
 $config['gapi_api_key'] = GAPI_API_KEY;
 $config['gapi_client_id'] = GAPI_CLIENT_ID;
 $config['gapi_client_secret'] = GAPI_CLIENT_SECRET;
 $config['archive_directory'] = ARCHIVE_DIRECTORY;
+$config['timeout_minutes'] = TIMEOUT_MINUTES;
 
 $app = new \Slim\App(['settings' => $config]);
 
@@ -100,6 +101,11 @@ $app->get('/test', function (Request $request, Response $response, array $args) 
         closedir($handle);
     }
 
+    # sort by date desc
+    usort($output, function ($a, $b) {
+        return $b['published'] <=> $a['published'];
+    });
+
     $response = $this->view->render($response, 'results.html', array("output" => $output));
 
     return $response;
@@ -121,44 +127,9 @@ $app->post('/csv', function (Request $request, Response $response, array $args) 
         return $response->withStatus(400);
     }
 
-    $client = new Google_Client();
-    $client->setApplicationName('gplus-archiver');
+    # create our API interface class
+    $plus = new GPlusArchiver();
 
-    # These are for OAUTH
-    #$client->setClientId($this->get('settings')['gapi_client_id']);
-    #$client->setClientSecret($this->get('settings')['gapi_client_secret']);
-
-    # This is for API key
-    $client->setDeveloperKey($this->get('settings')['gapi_api_key']);
-
-    $referer = (isset($_SERVER['HTTPS']) ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'];
-    $client->setRedirectUri($referer);
-    $client->setHttpClient(new \GuzzleHttp\Client(['headers' => ['referer' => $referer]]));
-
-    # This is for the javascript? discovery docs
-    #$client->addScope('https://www.googleapis.com/discovery/v1/apis/plus/v1/rest');
-
-    # This is for G+ API access
-    $client->addScope('https://www.googleapis.com/auth/plus.login');
-
-    # Now we can create the service client
-    $plus = new Google_Service_Plus($client);
-
-    /*
-        Request
-
-        Parameter name	Value	            Description
-        Required query parameters
-        query	        string	            Full-text search query string.
-
-        Optional query parameters
-        language	    string	            Specify the preferred language to search with. See search language codes for available values.
-        maxResults	    unsigned integer	The maximum number of activities to include in the response, which is used for paging. For any response, the actual number returned might be less than the specified maxResults. Acceptable values are 1 to 20, inclusive. (Default: 10)
-        orderBy	        string	            Specifies how to order search results. Acceptable values are:
-                                                "best": Sort activities by relevance to the user, most relevant first.
-                                                "recent": Sort activities by published date, most recent first. (default)
-        pageToken	    string	            The continuation token, which is used to page through large result sets. To get the next page of results, set this parameter to the value of "nextPageToken" from the previous response. This token can be of any length.
-     */
     # Set up a search for a community
     $query = "in:$communityId";
 
@@ -184,19 +155,17 @@ $app->post('/csv', function (Request $request, Response $response, array $args) 
     }
 
     $csvFile = $outDir . DIRECTORY_SEPARATOR . "$communityId.csv";
+    $pageToken = null;
     if (file_exists($csvFile)) {
-        # read the last page token to pick up where we left off
+        # read the last page token to pick up where we left off, if necessary
         $rows = file($csvFile);
         $last_row = array_pop($rows);
         $data = str_getcsv($last_row);
         $pageToken = $data[0];
-    } else {
-        # new file
-        $pageToken = null;
     }
 
     # This might take a while...
-    set_time_limit(10 * 60);
+    set_time_limit($this->get('settings')['timeout_minutes'] * 60);
     $fp = fopen($csvFile, 'a');  # w = write, a = append
     try {
         do {
@@ -205,7 +174,13 @@ $app->post('/csv', function (Request $request, Response $response, array $args) 
                 'maxResults' => '20',    # 20 max ...
                 'pageToken' => $pageToken
             );
-            $results = $plus->activities->search($query, $params);
+            # Returns Google_Service_Plus_ActivityFeed
+            $results = $plus->activitiesSearch($query, $params);
+
+            if (!$results) {
+                $response->getBody()->write('Something went wrong querying the Google API.');
+                return $response->withStatus(400);
+            }
 
             if (count($results['items']) == 0) {
                 # Known bug: https://code.google.com/archive/p/google-plus-platform/issues/406
@@ -215,20 +190,20 @@ $app->post('/csv', function (Request $request, Response $response, array $args) 
                 foreach ($results['items'] as $item) {
 
                     # This will split the etag into directory + file
-                    // $outFile = str_replace('"', "", $item['etag']);
-                    // $outFile = explode('/', $outFile);
-                    // $tmpDir = $outDir . DIRECTORY_SEPARATOR . $outFile[0];
-                    // if (!is_dir($tmpDir)) {
-                    //     mkdir($tmpDir);
-                    // }
-                    // $outFile = $tmpDir . DIRECTORY_SEPARATOR . $outFile[1] . ".phpobj";
-                    //
-                    // # for now just serialize the object
-                    // if (!file_exists($outFile)) {
-                    //     file_put_contents($outFile, serialize($item));
-                    // }
+                    $outFile = str_replace('"', "", $item['etag']);
+                    $outFile = explode('/', $outFile);
+                    $tmpDir = $outDir . DIRECTORY_SEPARATOR . $outFile[0];
+                    if (!is_dir($tmpDir)) {
+                        mkdir($tmpDir);
+                    }
+                    $outFile = $tmpDir . DIRECTORY_SEPARATOR . $outFile[1] . ".phpobj";
 
-                    # Write a CSV file
+                    # for now just serialize the object
+                    if (!file_exists($outFile)) {
+                        file_put_contents($outFile, serialize($item));
+                    }
+
+                    # Write a CSV file, too!
                     $row = array(
                         $pageToken,
                         #$item['etag'],

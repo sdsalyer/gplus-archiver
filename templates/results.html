@@ -26,7 +26,7 @@ object.attachments[].embed
 #}
 
 {% for item in output %}
-<li class=".post">
+<li style="margin: 0; padding: 0; list-style-type: none;">
     <h2 class="post-list__post-title post-title"><a href="{{ item.url }}" title="{{ item.title }}"
                                                     target="_blank">{{ item.title }}</a></h2>
     <p class="excerpt">{{ item.object.content | raw }}</p>
