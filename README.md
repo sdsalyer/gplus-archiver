@@ -9,6 +9,16 @@ tool.
 I hope to have it polished enough to be widely applicable in the coming months 
 as the Google+ death clock continues ticking.
 
+### TODO
+
+- Create subdirectories with community ID
+  - parse community name out of "access" "description", e.g. "Immersive Imaginative Education (IIE) (Ideas)"
+  - write to a file in the directory?
+  - e.g. - archive/communityId/json
+         - archive/communityId/otherFormat
+- Retrieve comments from the API
+- Retrieve attachments from the API
+
 ## Usage
 
 Simply enter the URL for your Community and press the "Archive It!" button. 

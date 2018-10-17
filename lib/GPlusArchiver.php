@@ -50,13 +50,70 @@ class GPlusArchiver
         return $this->plus->activities->search($query, $params);
     }
 
-    public function getComments(array $comments)
+    public function getComments(string $activityId)
     {
-        // TODO: get comments
+        $comments = array();
+        $pageToken = null;
+        do {
+            $params = array(
+                'sortOrder' => 'ascending',   # ascending or descending
+                'maxResults' => '20',    # 500 max on comments
+                'pageToken' => $pageToken
+            );
+            $results = $this->plus->comments->listComments($activityId, $params);
+
+            if (!$results) {
+                return $comments;
+            }
+
+            if (count($results['items']) == 0) {
+                # Known bug: https://code.google.com/archive/p/google-plus-platform/issues/406
+                $pageToken = null;
+            } else {
+                $pageToken = $results['nextPageToken'];
+                foreach ($results['items'] as $item) {
+                    $row = array(
+                        'id' => $activityId,
+                        'etag' => $item['etag'], # not entirely sure this will be useful
+                        'published' => $item['published'],
+                        'updated' => $item['updated'],
+                        # 'url' => $item['selfLink'],  # useless
+                        'author' => [
+                            'displayName' => $item['actor']['displayName'],
+                            'id' => $item['actor']['id'],
+                            'url' => $item['actor']['url'],
+                            'profileImage' => $item['actor']['image']['url']
+                        ],
+                        'content' => $item['object']['content']
+                    );
+                    array_push($comments, $row);
+                }
+            }
+        } while (!is_null($pageToken));
+
+        return $comments;
     }
 
     public function getAttachments(array $attachments)
     {
         // TODO: get attachments
+    }
+
+    /**
+     * Parse the name and category out of an access->description value
+     * e.g. 'Lone Wolf Roleplaying (Actual Plays)' would output
+     *      $name = 'Lone Wolf Roleplaying'
+     *      $category = 'Actual Plays'
+     *
+     * @param string $communityDescription
+     * @param string $name
+     * @param string $category
+     */
+    public static function parseCommunityNameAndCategory(string $communityDescription, string &$name, string &$category)
+    {
+        $lastOpenParen = strrpos($communityDescription, '(');
+        $lastCloseParen = strrpos($communityDescription, ')');
+        $name = substr($communityDescription, 0, $lastOpenParen - 1);
+        $category = substr($communityDescription, $lastOpenParen + 1, $lastCloseParen - $lastOpenParen - 1);
     }
 }

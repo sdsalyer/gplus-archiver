@@ -63,19 +63,22 @@ $container['logger'] = function ($c) {
 $app->get('/', function (Request $request, Response $response, array $args) {
 
     $communities = array();
-    $outDir = $this->get('settings')['archive_directory'] . DIRECTORY_SEPARATOR . 'jb1Xzanox6i8Zyse4DcYD8sZqy0'; //
-    if ($handle = opendir($outDir)) {
-        /* This is the correct way to loop over the directory. */
-        while (false !== ($entry = readdir($handle))) {
-            if ($entry != "." && $entry != "..") {
-                $community = array(
-                    'url' => "/archive/jb1Xzanox6i8Zyse4DcYD8sZqy0/$entry",
-                    'name' => $entry
-                );
-                array_push($communities, $community);
-            }
+    $archiveDir = $this->get('settings')['archive_directory'];
+    $directories = glob($archiveDir . DIRECTORY_SEPARATOR . '*', GLOB_ONLYDIR);
+
+    foreach ($directories as $dir) {
+        $name = 'unnamed';
+        $url = '/archive/' . basename($dir);
+
+        $indexFile = $dir . DIRECTORY_SEPARATOR . 'index.txt';
+        if (file_exists($indexFile)) {
+            $name = file_get_contents($indexFile);
         }
-        closedir($handle);
+
+        array_push($communities, array(
+            'name' => $name,
+            'url' => $url
+        ));
     }
 
     $response = $this->view->render($response, 'index.html', array('communities' => $communities));
@@ -84,6 +87,21 @@ $app->get('/', function (Request $request, Response $response, array $args) {
 });
 
 $app->get('/test', function (Request $request, Response $response, array $args) {
+
+    $desc = 'Lone Wolf Roleplaying (Actual Plays)';
+    $name = '';
+    $category = '';
+
+    GPlusArchiver::parseCommunityNameAndCategory($desc, $name, $category);
+
+    echo "Desc: $desc<br />";
+    echo "Name: $name<br />";
+    echo "Category: $category<br />";
+
+    return $response;
+});
+
+$app->get('/jsontest', function (Request $request, Response $response, array $args) {
 
     $outDir = $this->get('settings')['archive_directory'] . DIRECTORY_SEPARATOR . 'jb1Xzanox6i8Zyse4DcYD8sZqy0'; //
 
@@ -106,16 +124,81 @@ $app->get('/test', function (Request $request, Response $response, array $args) 
         return $b['published'] <=> $a['published'];
     });
 
-    $response = $this->view->render($response, 'results.html', array("output" => $output));
+    foreach ($output as $obj) {
+        $tmpDir = $this->get('settings')['archive_directory'] . DIRECTORY_SEPARATOR . 'json';
+
+
+        $outFile = $tmpDir . DIRECTORY_SEPARATOR . $fileName . ".json";
+
+        echo $outFile . "<br />";
+        if (!is_dir($tmpDir)) {
+            mkdir($tmpDir);
+        }
+
+        # write json file
+        if (!file_exists($outFile)) {
+            file_put_contents($outFile, json_encode($obj));
+        }
+    }
+
+    return $response; //->withJson($output);
+});
+
+$app->get('/archive[/{communityId}]', function (Request $request, Response $response, array $args) {
+
+    if (!array_key_exists('communityId', $args)) {
+        # TODO: List archived communities, instead?
+        $response->getBody()->write('You must supply a community ID.');
+        return $response->withStatus(400);
+    }
+
+    $name = 'unnamed';
+    $archiveDir = $this->get('settings')['archive_directory'] . DIRECTORY_SEPARATOR . $args['communityId'];
+    $indexFile = $archiveDir . DIRECTORY_SEPARATOR . 'index.txt';
+    if (file_exists($indexFile)) {
+        $name = file_get_contents($indexFile);
+    }
+
+    $zipFile = $archiveDir . DIRECTORY_SEPARATOR . urlencode($name) . '.zip';
+    $jsonDir = $archiveDir . DIRECTORY_SEPARATOR . 'json';
+    print $zipFile . "<br />";
+    if (!file_exists($zipFile)) {
+        // Create the zip
+        $zip = new ZipArchive;
+        if ($zip->open($zipFile, ZipArchive::CREATE) === TRUE) {
+            $dots = array('.', '..');
+            foreach (new DirectoryIterator($jsonDir) as $fileInfo) {
+                if (in_array($fileInfo->getFilename(), $dots)) {
+                    continue;
+                }
+                $fileName = $fileInfo->getPathname();
+                print $fileName . "<br />";
+                $zip->addFile($fileName, $fileInfo->getFilename());
+            }
+
+            $zip->close();
+        }
+    }
+
+    # TODO: something about these headers isn't right
+    # ZIP download headers
+    $response = $response->withHeader('Content-Type', 'application/zip')
+        ->withHeader('Content-Disposition', 'attachment;filename="' . basename($zipFile) . '"')
+        ->withHeader('Expires', '0')
+        #->withHeader('Cache-Control', 'must-revalidate')
+        ->withHeader('Pragma', 'public')
+        ->withHeader('Content-Length', filesize($zipFile));
+
+    readfile($zipFile);
 
     return $response;
 });
 
-$app->post('/csv', function (Request $request, Response $response, array $args) {
+$app->post('/archive', function (Request $request, Response $response, array $args) {
 
     // E.g. https://plus.google.com/communities/116965157741523529510
     if (!isset($_POST['communityId'])) {
-        $response->getBody()->write('You must supply a community ID.');
+        $response->getBody()->write('You must supply a community URL.');
         return $response->withStatus(400);
     }
 
@@ -127,47 +210,52 @@ $app->post('/csv', function (Request $request, Response $response, array $args) 
         return $response->withStatus(400);
     }
 
-    # create our API interface class
-    $plus = new GPlusArchiver();
-
-    # Set up a search for a community
-    $query = "in:$communityId";
-
-    /*
-        Response
-
-        Property name	Value	    Description	Notes
-        kind	        string	    Identifies this resource as a collection of activities. Value: "plus#activityFeed".
-        nextPageToken	string	    The continuation token, which is used to page through large result sets. Provide this value in a subsequent request to return the next page of results.
-        selfLink	    string	    Link to this activity resource.
-        nextLink	    string	    Link to the next page of activities.
-        title	        string	    The title of this collection of activities, which is a truncated portion of the content.
-        updated	        datetime	The time at which this collection of activities was last updated. Formatted as an RFC 3339 timestamp.
-        id	            string	    The ID of this collection of activities. Deprecated.
-        items[]	        list	    The activities in this page of results.
-                                    See: https://developers.google.com/+/web/api/rest/latest/activities#resource
-        etag	        etag	    ETag of this response for caching purposes.
-     */
-
-    $outDir = $this->get('settings')['archive_directory'];
-    if (!is_dir($outDir)) {
-        mkdir($outDir);
-    }
-
-    $csvFile = $outDir . DIRECTORY_SEPARATOR . "$communityId.csv";
-    $pageToken = null;
-    if (file_exists($csvFile)) {
-        # read the last page token to pick up where we left off, if necessary
-        $rows = file($csvFile);
-        $last_row = array_pop($rows);
-        $data = str_getcsv($last_row);
-        $pageToken = $data[0];
-    }
-
-    # This might take a while...
-    set_time_limit($this->get('settings')['timeout_minutes'] * 60);
-    $fp = fopen($csvFile, 'a');  # w = write, a = append
+    # Set up some directories
     try {
+        # Archive root directory
+        $archiveDir = $this->get('settings')['archive_directory'];
+        if (!is_dir($archiveDir)) {
+            mkdir($archiveDir);
+        }
+
+        # community directory
+        $outDir = $archiveDir . DIRECTORY_SEPARATOR . $communityId;
+        if (!is_dir($outDir)) {
+            mkdir($outDir);
+        }
+
+        # serialized object directory
+        $objDir = $outDir . DIRECTORY_SEPARATOR . 'phpobj';
+        if (!is_dir($objDir)) {
+            mkdir($objDir);
+        }
+
+        # json directory
+        $jsonDir = $outDir . DIRECTORY_SEPARATOR . 'json';
+        if (!is_dir($jsonDir)) {
+            mkdir($jsonDir);
+        }
+    } catch (Exception $e) {
+        $msg = 'Unable to create directories';
+        $this->logger->addError("$msg: " . $e->getMessage());
+        $response->getBody()->write($msg);
+        return $response->withStatus(400);
+    }
+
+    // TODO: check directory contents and
+    //       - figure out where we left off
+    //       - figure out if anything is new/different
+
+    try {
+        set_time_limit($this->get('settings')['timeout_minutes'] * 60);
+        $pageToken = null;
+
+        # create our API interface class
+        $plus = new GPlusArchiver();
+
+        # Set up a search for a community
+        $query = "in:$communityId";
+
         do {
             $params = array(
                 'orderBy' => 'recent',   # best or recent
@@ -189,40 +277,82 @@ $app->post('/csv', function (Request $request, Response $response, array $args) 
                 $pageToken = $results['nextPageToken'];
                 foreach ($results['items'] as $item) {
 
-                    # This will split the etag into directory + file
-                    $outFile = str_replace('"', "", $item['etag']);
-                    $outFile = explode('/', $outFile);
-                    $tmpDir = $outDir . DIRECTORY_SEPARATOR . $outFile[0];
-                    if (!is_dir($tmpDir)) {
-                        mkdir($tmpDir);
-                    }
-                    $outFile = $tmpDir . DIRECTORY_SEPARATOR . $outFile[1] . ".phpobj";
+//                    # This will split the etag into directory + file
+//                    $outFile = str_replace('"', "", $item['etag']);
+//                    $outFile = explode('/', $outFile);
+//                    $tmpDir = $outDir . DIRECTORY_SEPARATOR . $outFile[0];
+//                    if (!is_dir($tmpDir)) {
+//                        mkdir($tmpDir);
+//                    }
+//                    $outFile = $tmpDir . DIRECTORY_SEPARATOR . $outFile[1] . ".phpobj";
 
-                    # for now just serialize the object
+                    # Parse the community name and category
+                    $communityDescription = $item['access']['description'];
+                    $communityName = '';
+                    $category = '';
+                    GPlusArchiver::parseCommunityNameAndCategory($communityDescription, $communityName, $category);
+
+                    # Note down the community name...
+                    $indexFile = $outDir . DIRECTORY_SEPARATOR . "index.txt";
+                    if (!file_exists($indexFile)) {
+                        file_put_contents($indexFile, $communityName);
+                    }
+
+                    # Pull in comments
+                    $activityId = $item['id'];
+                    $comments = array();
+                    if ($item['object']['replies']['totalItems'] > 0) {
+                        $comments = $plus->getComments($activityId);
+                    }
+
+                    # Pull in attachments
+                    $attachments = $item['object']['attachments'];
+
+                    # Only these fields
+                    $row = array(
+                        'id' => $activityId,
+                        'etag' => $item['etag'], # not entirely sure this will be useful
+                        'published' => $item['published'],
+                        'updated' => $item['updated'],
+                        'title' => $item['title'],
+                        'url' => $item['url'],
+                        'author' => [
+                            'displayName' => $item['actor']['displayName'],
+                            'id' => $item['actor']['id'],
+                            'url' => $item['actor']['url'],
+                            'profileImage' => $item['actor']['image']['url']
+                        ],
+                        'content' => $item['object']['content'],
+                        'comments' => $comments,
+                        'attachments' => $attachments,
+                        'category' => $category
+                    );
+
+                    # Let's serialize the results so we can read them again later without an API call
+                    $itemId = $item['id'];
+                    $outFile = $objDir . DIRECTORY_SEPARATOR . "$itemId.phpobj";
                     if (!file_exists($outFile)) {
                         file_put_contents($outFile, serialize($item));
                     }
 
-                    # Write a CSV file, too!
-                    $row = array(
-                        $pageToken,
-                        #$item['etag'],
-                        $item['published'],
-                        #$item['actor'],
-                        $item['url']
-                    );
-
-                    fputcsv($fp, $row);
-                    // var_export($row);
+                    # Create some json
+                    $pubDate = new DateTime($row['published']);
+                    $fileName = $pubDate->format('Y-m-d-H.i.s') . '_' . str_replace(" ", "_", $row['author']['displayName']);
+                    $outFile = $jsonDir . DIRECTORY_SEPARATOR . "$fileName.json";
+                    if (!file_exists($outFile)) {
+                        file_put_contents($outFile, json_encode($row));
+                    }
                 }
             }
-            #var_export($results['items']);
-            //print('</pre>');
         } while (!is_null($pageToken));
-    } finally {
-        fclose($fp);
+    } catch (Exception $e) {
+        $this->logger->addError($e->getMessage());
     }
+//    finally {
+//
+//    }
 
+    # TODO: show something or redirect back home
     #$response = $this->view->render($response, 'results.html', $output );
 
     return $response;

@@ -6,13 +6,20 @@
 <h2 class="content-subhead">Enter your community's G+ URL</h2>
 <div>
     <!-- make sure the attribute enctype is set to multipart/form-data -->
-    <form method="post" action="/csv" enctype="multipart/form-data">
+    <form method="post" action="/archive" enctype="multipart/form-data">
         <!-- upload of a single file -->
         <p>
             <input type="text" name="communityId" id="communityId"
                    placeholder="https://plus.google.com/communities/116965157741523529510"
                    pattern="https://plus.google.com/communities/.*" style="width:90%;" required/>
         </p>
+
+        <fieldset>
+            <legend>Output Format(s)</legend>
+            <p>
+                <label for="json"><input type="checkbox" checked disabled name="json" id="json"/> JSON</label>
+            </p>
+        </fieldset>
 
         <p style="text-align: center;">
             <input type="submit" value="Archive It!" style="width: 30%;"/>
