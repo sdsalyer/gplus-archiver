@@ -1,23 +1,18 @@
 # gplus-archiver
 
-A tool for exporting G+ data. Currently only working for Community content. 
-It's recommended to export your personal data using the 
+A tool for exporting G+ data. Currently only archiving Community content. 
+It's recommended to export your own personal data using the 
 [Google Takeout](https://takeout.google.com/settings/takeout)
 tool.
 
-**Note:** the tool is very much a work-in-progress and currently incomplete, but 
+**Note:** the tool is very much a work-in-progress, but 
 I hope to have it polished enough to be widely applicable in the coming months 
 as the Google+ death clock continues ticking.
 
-### TODO
+### Limitations
 
-- Create subdirectories with community ID
-  - parse community name out of "access" "description", e.g. "Immersive Imaginative Education (IIE) (Ideas)"
-  - write to a file in the directory?
-  - e.g. - archive/communityId/json
-         - archive/communityId/otherFormat
-- Retrieve comments from the API
-- Retrieve attachments from the API
+The Google API quota is 10,000 queries per day and this is a query-intensive process. It's possible 
+to request a quota increase, but otherwise quotas reset at midnight PST.
 
 ## Usage
 
@@ -27,11 +22,6 @@ Google+ API and extract all the public posts within.
 
 If the community has previously been archived, the resultant export is made 
 available for download on the index page. 
-
-### Limitations
-
-The Google API does enforce query limits, which reset at midnight PST, so it is 
-possible to cap out on API calls.
 
 ### How it works
 

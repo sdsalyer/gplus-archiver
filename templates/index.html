@@ -6,7 +6,8 @@
 <h2 class="content-subhead">Enter your community's G+ URL</h2>
 <div>
     <!-- make sure the attribute enctype is set to multipart/form-data -->
-    <form method="post" action="/archive" enctype="multipart/form-data">
+    <form method="post" action="/archive" enctype="multipart/form-data"
+          onsubmit="archiveButton.disabled = true; return true;">
         <!-- upload of a single file -->
         <p>
             <input type="text" name="communityId" id="communityId"
@@ -22,7 +23,7 @@
         </fieldset>
 
         <p style="text-align: center;">
-            <input type="submit" value="Archive It!" style="width: 30%;"/>
+            <input type="submit" name="archiveButton" value="Archive It!" style="width: 30%;"/>
         </p>
     </form>
 </div>

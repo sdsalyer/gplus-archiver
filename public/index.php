@@ -101,49 +101,6 @@ $app->get('/test', function (Request $request, Response $response, array $args) 
     return $response;
 });
 
-$app->get('/jsontest', function (Request $request, Response $response, array $args) {
-
-    $outDir = $this->get('settings')['archive_directory'] . DIRECTORY_SEPARATOR . 'jb1Xzanox6i8Zyse4DcYD8sZqy0'; //
-
-    $output = array();
-    if ($handle = opendir($outDir)) {
-        /* This is the correct way to loop over the directory. */
-        while (false !== ($entry = readdir($handle))) {
-            if ($entry != "." && $entry != "..") {
-                $obj = file_get_contents($outDir . DIRECTORY_SEPARATOR . $entry);
-                $obj = unserialize($obj);
-                //var_export($obj);
-                array_push($output, $obj);
-            }
-        }
-        closedir($handle);
-    }
-
-    # sort by date desc
-    usort($output, function ($a, $b) {
-        return $b['published'] <=> $a['published'];
-    });
-
-    foreach ($output as $obj) {
-        $tmpDir = $this->get('settings')['archive_directory'] . DIRECTORY_SEPARATOR . 'json';
-
-
-        $outFile = $tmpDir . DIRECTORY_SEPARATOR . $fileName . ".json";
-
-        echo $outFile . "<br />";
-        if (!is_dir($tmpDir)) {
-            mkdir($tmpDir);
-        }
-
-        # write json file
-        if (!file_exists($outFile)) {
-            file_put_contents($outFile, json_encode($obj));
-        }
-    }
-
-    return $response; //->withJson($output);
-});
-
 $app->get('/archive[/{communityId}]', function (Request $request, Response $response, array $args) {
 
     if (!array_key_exists('communityId', $args)) {
@@ -152,6 +109,7 @@ $app->get('/archive[/{communityId}]', function (Request $request, Response $resp
         return $response->withStatus(400);
     }
 
+    # fetch the community name
     $name = 'unnamed';
     $archiveDir = $this->get('settings')['archive_directory'] . DIRECTORY_SEPARATOR . $args['communityId'];
     $indexFile = $archiveDir . DIRECTORY_SEPARATOR . 'index.txt';
@@ -160,10 +118,10 @@ $app->get('/archive[/{communityId}]', function (Request $request, Response $resp
     }
 
     $zipFile = $archiveDir . DIRECTORY_SEPARATOR . urlencode($name) . '.zip';
-    $jsonDir = $archiveDir . DIRECTORY_SEPARATOR . 'json';
-    print $zipFile . "<br />";
+
+    # Create the zip if it doesn't exist
     if (!file_exists($zipFile)) {
-        // Create the zip
+        $jsonDir = $archiveDir . DIRECTORY_SEPARATOR . 'json';
         $zip = new ZipArchive;
         if ($zip->open($zipFile, ZipArchive::CREATE) === TRUE) {
             $dots = array('.', '..');
@@ -180,18 +138,21 @@ $app->get('/archive[/{communityId}]', function (Request $request, Response $resp
         }
     }
 
-    # TODO: something about these headers isn't right
-    # ZIP download headers
-    $response = $response->withHeader('Content-Type', 'application/zip')
-        ->withHeader('Content-Disposition', 'attachment;filename="' . basename($zipFile) . '"')
+    # ZIP download
+    $fh = fopen($zipFile, 'rb');
+    $stream = new \Slim\Http\Stream($fh);
+
+    # send the stream output with zip headers
+    return $response->withHeader('Content-Type', 'application/force-download')
+        ->withHeader('Content-Type', 'application/octet-stream')
+        ->withHeader('Content-Type', 'application/download')
+        ->withHeader('Content-Description', 'File Transfer')
+        ->withHeader('Content-Transfer-Encoding', 'binary')
+        ->withHeader('Content-Disposition', 'attachment; filename="' . basename($zipFile) . '"')
         ->withHeader('Expires', '0')
-        #->withHeader('Cache-Control', 'must-revalidate')
+        ->withHeader('Cache-Control', 'must-revalidate, post-check=0, pre-check=0')
         ->withHeader('Pragma', 'public')
-        ->withHeader('Content-Length', filesize($zipFile));
-
-    readfile($zipFile);
-
-    return $response;
+        ->withBody($stream);
 });
 
 $app->post('/archive', function (Request $request, Response $response, array $args) {
@@ -242,27 +203,33 @@ $app->post('/archive', function (Request $request, Response $response, array $ar
         return $response->withStatus(400);
     }
 
-    // TODO: check directory contents and
-    //       - figure out where we left off
-    //       - figure out if anything is new/different
+    // TODO: figure out if anything is new/different? I think we'd just examine the first page of results
+
+    # Pick up from checkpoint
+    $pageToken = null;
+    $pageTokenFile = $outDir . DIRECTORY_SEPARATOR . "pageToken.txt";
+    if (file_exists($pageTokenFile)) {
+        $pageToken = file_get_contents($pageTokenFile);
+        unlink($pageTokenFile);
+    }
 
     try {
         set_time_limit($this->get('settings')['timeout_minutes'] * 60);
-        $pageToken = null;
 
-        # create our API interface class
+        # create our API interface object
         $plus = new GPlusArchiver();
 
         # Set up a search for a community
         $query = "in:$communityId";
 
+        # search and iterate over result pages
+        $this->logger->addInfo("Start [$communityId] ----------------------------------------------------------------");
         do {
             $params = array(
                 'orderBy' => 'recent',   # best or recent
                 'maxResults' => '20',    # 20 max ...
                 'pageToken' => $pageToken
             );
-            # Returns Google_Service_Plus_ActivityFeed
             $results = $plus->activitiesSearch($query, $params);
 
             if (!$results) {
@@ -274,18 +241,9 @@ $app->post('/archive', function (Request $request, Response $response, array $ar
                 # Known bug: https://code.google.com/archive/p/google-plus-platform/issues/406
                 $pageToken = null;
             } else {
+                # Process the results
                 $pageToken = $results['nextPageToken'];
                 foreach ($results['items'] as $item) {
-
-//                    # This will split the etag into directory + file
-//                    $outFile = str_replace('"', "", $item['etag']);
-//                    $outFile = explode('/', $outFile);
-//                    $tmpDir = $outDir . DIRECTORY_SEPARATOR . $outFile[0];
-//                    if (!is_dir($tmpDir)) {
-//                        mkdir($tmpDir);
-//                    }
-//                    $outFile = $tmpDir . DIRECTORY_SEPARATOR . $outFile[1] . ".phpobj";
-
                     # Parse the community name and category
                     $communityDescription = $item['access']['description'];
                     $communityName = '';
@@ -302,13 +260,15 @@ $app->post('/archive', function (Request $request, Response $response, array $ar
                     $activityId = $item['id'];
                     $comments = array();
                     if ($item['object']['replies']['totalItems'] > 0) {
+                        # TODO process attachments in replies...
                         $comments = $plus->getComments($activityId);
                     }
 
                     # Pull in attachments
+                    # TODO: fetch the actual attachments
                     $attachments = $item['object']['attachments'];
 
-                    # Only these fields
+                    # Set up our JSON structure
                     $row = array(
                         'id' => $activityId,
                         'etag' => $item['etag'], # not entirely sure this will be useful
@@ -328,7 +288,7 @@ $app->post('/archive', function (Request $request, Response $response, array $ar
                         'category' => $category
                     );
 
-                    # Let's serialize the results so we can read them again later without an API call
+                    # Serialize the results so we can read them again later without an API call
                     $itemId = $item['id'];
                     $outFile = $objDir . DIRECTORY_SEPARATOR . "$itemId.phpobj";
                     if (!file_exists($outFile)) {
@@ -347,15 +307,19 @@ $app->post('/archive', function (Request $request, Response $response, array $ar
         } while (!is_null($pageToken));
     } catch (Exception $e) {
         $this->logger->addError($e->getMessage());
+
+        # set a checkpoint we can pick back up from
+        if ($pageToken) {
+            $this->logger->addError("Failed at pageToken: $pageToken");
+            file_put_contents($pageTokenFile, $pageToken);
+        }
+    } finally {
+        $this->logger->addInfo("Done! [$communityId] ----------------------------------------------------------------");
     }
-//    finally {
-//
-//    }
 
-    # TODO: show something or redirect back home
-    #$response = $this->view->render($response, 'results.html', $output );
-
-    return $response;
+    # TODO: show something?
+    # This should send to the ZIP download route...
+    return $response->withRedirect("/archive/$communityId");
 });
 
 $app->run();
