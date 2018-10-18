@@ -2,7 +2,7 @@
   "name": "wispsoftime/gplus-archiver",
   "description": "This app assists in exporting content from Google+.",
   "homepage": "https://wispsoftime.com/gplus-archiver",
-  "license": "",
+  "license": "MIT",
   "authors": [
     {
       "name": "Spencer Salyer",
