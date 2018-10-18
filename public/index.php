@@ -62,24 +62,34 @@ $container['logger'] = function ($c) {
  */
 $app->get('/', function (Request $request, Response $response, array $args) {
 
+    # display the communities already archived
     $communities = array();
     $archiveDir = $this->get('settings')['archive_directory'];
     $directories = glob($archiveDir . DIRECTORY_SEPARATOR . '*', GLOB_ONLYDIR);
 
     foreach ($directories as $dir) {
         $name = 'unnamed';
-        $url = '/archive/' . basename($dir);
+        $id = basename($dir);
 
         $indexFile = $dir . DIRECTORY_SEPARATOR . 'index.txt';
         if (file_exists($indexFile)) {
             $name = file_get_contents($indexFile);
         }
 
-        array_push($communities, array(
-            'name' => $name,
-            'url' => $url
-        ));
+        # don't load in-progress archives
+        $errorFile = $dir . DIRECTORY_SEPARATOR . 'pageToken.txt';
+        if (!file_exists($errorFile)) {
+            array_push($communities, array(
+                'communityName' => $name,
+                'communityId' => $id
+            ));
+        }
     }
+
+    # order the list
+    usort($communities, function ($item1, $item2) {
+        return $item1['communityName'] <=> $item2['communityName'];
+    });
 
     $response = $this->view->render($response, 'index.html', array('communities' => $communities));
 
@@ -97,6 +107,33 @@ $app->get('/test', function (Request $request, Response $response, array $args) 
     echo "Desc: $desc<br />";
     echo "Name: $name<br />";
     echo "Category: $category<br />";
+
+    return $response;
+});
+
+$app->get('/download[/{communityId}]', function (Request $request, Response $response, array $args) {
+
+    if (!array_key_exists('communityId', $args)) {
+        $response->getBody()->write('You must supply a community ID.');
+        return $response->withStatus(400);
+    }
+
+    $communityId = $args['communityId'];
+
+    # fetch the community name
+    $name = 'unnamed';
+    $archiveDir = $this->get('settings')['archive_directory'] . DIRECTORY_SEPARATOR . $communityId;
+    $indexFile = $archiveDir . DIRECTORY_SEPARATOR . 'index.txt';
+    if (file_exists($indexFile)) {
+        $name = file_get_contents($indexFile);
+    }
+
+    $output = array(
+        'communityName' => $name,
+        'communityId' => $communityId
+    );
+
+    $response = $this->view->render($response, 'download.html', $output);
 
     return $response;
 });
@@ -213,6 +250,9 @@ $app->post('/archive', function (Request $request, Response $response, array $ar
         unlink($pageTokenFile);
     }
 
+    # create an initial checkpoint to flag this as in-progress
+    file_put_contents($pageTokenFile, '');
+
     try {
         set_time_limit($this->get('settings')['timeout_minutes'] * 60);
 
@@ -313,13 +353,21 @@ $app->post('/archive', function (Request $request, Response $response, array $ar
             $this->logger->addError("Failed at pageToken: $pageToken");
             file_put_contents($pageTokenFile, $pageToken);
         }
+
+        $response->getBody()->write('Something went wrong... Please try again.');
+        return $response->withStatus(500);
     } finally {
         $this->logger->addInfo("Done! [$communityId] ----------------------------------------------------------------");
     }
 
+    # cleanup the checkpoint file
+    if (file_exists($pageTokenFile)) {
+        unlink($pageTokenFile);
+    }
+
     # TODO: show something?
     # This should send to the ZIP download route...
-    return $response->withRedirect("/archive/$communityId");
+    return $response->withRedirect("/download/$communityId");
 });
 
 $app->run();

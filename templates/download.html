@@ -1,0 +1,15 @@
+{% extends "layout.html" %}
+
+{% block page_title %}gplus archiver{% endblock %}
+
+{% block body %}
+
+<h2>Download: {{ communityName }}</h2>
+
+<p>
+    You are downloading the <strong>{{ communityName }}</strong> archive. The download should begin shortly, if not
+    <a href="/archive/{{ communityId }}">click here</a>!
+</p>
+<iframe width="1" height="1" frameborder="0" src="/archive/{{ communityId }}"></iframe>
+
+{% endblock %}
