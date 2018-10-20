@@ -15,9 +15,6 @@ $config['displayErrorDetails'] = true;
 //$config['db']['dbname'] = 'exampleapp';
 
 # Constants should be defined somewhere in lib/ folder (e.g. secret.php)
-$config['gapi_api_key'] = GAPI_API_KEY;
-$config['gapi_client_id'] = GAPI_CLIENT_ID;
-$config['gapi_client_secret'] = GAPI_CLIENT_SECRET;
 $config['archive_directory'] = ARCHIVE_DIRECTORY;
 $config['timeout_minutes'] = TIMEOUT_MINUTES;
 
@@ -235,12 +232,15 @@ $app->post('/archive', function (Request $request, Response $response, array $ar
         }
     } catch (Exception $e) {
         $msg = 'Unable to create directories';
-        $this->logger->addError("$msg: " . $e->getMessage());
+        $this->logger->addError($msg);
+        $this->logger->addError($e->getMessage() . PHP_EOL . $e->getTraceAsString());
         $response->getBody()->write($msg);
         return $response->withStatus(400);
     }
 
     // TODO: figure out if anything is new/different? I think we'd just examine the first page of results
+
+    // TODO: skip all this if already archived!
 
     # Pick up from checkpoint
     $pageToken = null;
@@ -337,7 +337,7 @@ $app->post('/archive', function (Request $request, Response $response, array $ar
 
                     # Create some json
                     $pubDate = new DateTime($row['published']);
-                    $fileName = $pubDate->format('Y-m-d-H.i.s') . '_' . str_replace(" ", "_", $row['author']['displayName']);
+                    $fileName = $pubDate->format('Y-m-d-H.i.s') . '_' . urlencode($row['author']['displayName']); //str_replace(" ", "_", $row['author']['displayName']);
                     $outFile = $jsonDir . DIRECTORY_SEPARATOR . "$fileName.json";
                     if (!file_exists($outFile)) {
                         file_put_contents($outFile, json_encode($row));
@@ -346,7 +346,7 @@ $app->post('/archive', function (Request $request, Response $response, array $ar
             }
         } while (!is_null($pageToken));
     } catch (Exception $e) {
-        $this->logger->addError($e->getMessage());
+        $this->logger->addError($e->getMessage() . PHP_EOL . $e->getTraceAsString());
 
         # set a checkpoint we can pick back up from
         if ($pageToken) {
