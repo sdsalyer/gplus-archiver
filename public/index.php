@@ -39,8 +39,12 @@ $container['view'] = function ($container) {
 };
 
 $container['logger'] = function ($c) {
+    $date = date('Y-m-d');
     $logger = new \Monolog\Logger('gplus-archiver-logger');
-    $file_handler = new \Monolog\Handler\StreamHandler('../logs/gplus-archiver.log');
+    $file_handler = new \Monolog\Handler\StreamHandler("../logs/$date-gplus-archiver.log");
+    $formatter = new \Monolog\Formatter\LineFormatter(null, null, true);
+    $formatter->includeStacktraces();
+    $file_handler->setFormatter($formatter);
     $logger->pushHandler($file_handler);
     return $logger;
 };
@@ -85,7 +89,7 @@ $app->get('/', function (Request $request, Response $response, array $args) {
 
     # order the list
     usort($communities, function ($item1, $item2) {
-        return $item1['communityName'] <=> $item2['communityName'];
+        return strtoupper($item1['communityName']) <=> strtoupper($item2['communityName']);
     });
 
     $response = $this->view->render($response, 'index.html', array('communities' => $communities));
@@ -125,6 +129,7 @@ $app->get('/download[/{communityId}]', function (Request $request, Response $res
         $name = file_get_contents($indexFile);
     }
 
+    # TODO: md5 compare
     $output = array(
         'communityName' => $name,
         'communityId' => $communityId
@@ -201,9 +206,11 @@ $app->post('/archive', function (Request $request, Response $response, array $ar
     $communityId = explode("/", $url)[2]; # /communities/116965157741523529510
 
     if (!$communityId) {
+        $this->logger->addInfo("Invalid args: " . print_r($_POST, true));
         $response->getBody()->write('You must supply a community ID.');
         return $response->withStatus(400);
     }
+    $this->logger->addInfo("Archiving community with ID: $communityId");
 
     # Set up some directories
     try {
@@ -248,6 +255,7 @@ $app->post('/archive', function (Request $request, Response $response, array $ar
     if (file_exists($pageTokenFile)) {
         $pageToken = file_get_contents($pageTokenFile);
         unlink($pageTokenFile);
+        $this->logger->addInfo("Restarting from checkpoint. Page Token: [$pageToken]");
     }
 
     # create an initial checkpoint to flag this as in-progress
@@ -270,10 +278,12 @@ $app->post('/archive', function (Request $request, Response $response, array $ar
                 'maxResults' => '20',    # 20 max ...
                 'pageToken' => $pageToken
             );
+            $this->logger->addInfo("Query: $query" . PHP_EOL . "Params: " . print_r($params, true));
             $results = $plus->activitiesSearch($query, $params);
 
             if (!$results) {
                 $response->getBody()->write('Something went wrong querying the Google API.');
+                $this->logger->addError("Response: " . print_r($response, true) . PHP_EOL . "Results: " . print_r($results, true));
                 return $response->withStatus(400);
             }
 
@@ -289,6 +299,7 @@ $app->post('/archive', function (Request $request, Response $response, array $ar
                     $communityName = '';
                     $category = '';
                     GPlusArchiver::parseCommunityNameAndCategory($communityDescription, $communityName, $category);
+                    #$this->logger->addDebug("[$communityName] - ($category)");
 
                     # Note down the community name...
                     $indexFile = $outDir . DIRECTORY_SEPARATOR . "index.txt";
@@ -301,6 +312,7 @@ $app->post('/archive', function (Request $request, Response $response, array $ar
                     $comments = array();
                     if ($item['object']['replies']['totalItems'] > 0) {
                         # TODO process attachments in replies...
+                        $this->logger->addInfo("Retrieving comments for post: $activityId");
                         $comments = $plus->getComments($activityId);
                     }
 
@@ -337,11 +349,14 @@ $app->post('/archive', function (Request $request, Response $response, array $ar
 
                     # Create some json
                     $pubDate = new DateTime($row['published']);
-                    $fileName = $pubDate->format('Y-m-d-H.i.s') . '_' . urlencode($row['author']['displayName']); //str_replace(" ", "_", $row['author']['displayName']);
+                    $author = substr(urlencode($row['author']['displayName']), 0, 40);
+                    $fileName = $pubDate->format('Y-m-d-H.i.s') . '_' . $author ; //str_replace(" ", "_", $row['author']['displayName']);
                     $outFile = $jsonDir . DIRECTORY_SEPARATOR . "$fileName.json";
                     if (!file_exists($outFile)) {
                         file_put_contents($outFile, json_encode($row));
                     }
+
+                    $this->logger->addDebug("Processed: $fileName");
                 }
             }
         } while (!is_null($pageToken));
@@ -362,6 +377,7 @@ $app->post('/archive', function (Request $request, Response $response, array $ar
 
     # cleanup the checkpoint file
     if (file_exists($pageTokenFile)) {
+        $this->logger->addInfo("[$communityName] is now archived!");
         unlink($pageTokenFile);
     }
 
