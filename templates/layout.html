@@ -19,6 +19,56 @@
 
     <!-- style overrides -->
     <link rel="stylesheet" href="/css/main.css">
+
+    <style type="text/css">
+        .ga-post {
+            margin-top: 3em;
+            margin-bottom: 3em;
+        }
+
+        /* Comment expand/collapse CSS */
+        .ga-comment-hide,
+        .ga-comment-show {
+            padding-left: 1.2em;
+        }
+
+        .ga-comment,
+        .ga-comment-show,
+        .ga-comment-hide:target {
+            display: none;
+        }
+
+        .ga-comment-hide:target + .ga-comment-show,
+        .ga-comment-hide:target ~ .ga-comment {
+            display: block;
+        }
+
+        .ga-comment-container {
+            border: 1px solid silver;
+            margin: 1.2em 3em 2em 1.2em;
+        }
+
+        .ga-stripe {
+            padding: 1.2em
+        }
+
+        .ga-stripe-even {
+            background-color: lightgray;
+        }
+
+        .ga-stripe-odd {
+            background-color: whitesmoke;
+        }
+
+        .ga-pagination {
+            width: 80%;
+            margin: 2em auto;
+            padding: 1.2em;
+            font-size: .8em;
+            border-top: 1px solid darkred;
+            text-align: center;
+        }
+    </style>
 </head>
 <body>
 <div id="layout">

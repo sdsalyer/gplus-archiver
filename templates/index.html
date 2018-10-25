@@ -6,7 +6,7 @@
 <h2 class="content-subhead">Enter your community's G+ URL</h2>
 <div>
     <!-- make sure the attribute enctype is set to multipart/form-data -->
-    <form method="post" action="/archive" enctype="multipart/form-data"
+    <form method="post" action="/archive" enctype="multipart/form-data" class="pure-form"
           onsubmit="archiveButton.disabled = true; return true;">
         <!-- upload of a single file -->
         <p>
@@ -18,12 +18,14 @@
         <fieldset>
             <legend>Output Format(s)</legend>
             <p>
-                <label for="json"><input type="checkbox" checked disabled name="json" id="json"/> JSON</label>
+                <label for="json" class="pure-checkbox"><input type="checkbox" checked disabled name="json" id="json"/>
+                    JSON</label>
             </p>
         </fieldset>
 
         <p style="text-align: center;">
-            <input type="submit" name="archiveButton" value="Archive It!" style="width: 30%;"/>
+            <input type="submit" name="archiveButton" value="Archive It!"
+                   class="button-large pure-button pure-button-primary"/>
         </p>
     </form>
 </div>
@@ -36,7 +38,9 @@
 
 <ul>
     {% for community in communities %}
-    <li><a href="/download/{{ community.communityId }}">{{ community.communityName }}</a></li>
+    <li><strong>{{ community.communityName }}</strong> [<a href="/view/{{ community.communityId }}">view</a>] [<a
+            href="/download/{{ community.communityId }}">download</a>]
+    </li>
     {% endfor %}
 </ul>
 {% endif %}

@@ -1,0 +1,87 @@
+{% extends "layout.html" %}
+
+{% block page_title %}gplus archiver{% endblock %}
+
+{% block body %}
+
+<h2>{{ communityName }} Archive</h2>
+
+<p>
+    You are viewing the <strong>{{ communityName }}</strong> archive. To download the complete archive,
+    <a href="/archive/{{ communityId }}">click here</a>!
+</p>
+
+<div class="post-list">
+
+    {% for post in posts %}
+    <div class="ga-post">
+        <h3><a href="{{ post.url }}">{{ post.title }}</a></h3>
+        <h4 class="post-meta__author"><a href="{{ post.author.url }}"><img class="user-image"
+                                                                           style="width: 1.2em; height: 1.2em; vertical-align: bottom;"
+                                                                           src="{{ post.author.profileImage }}"/>{{
+            post.author.displayName }}</a></h4>
+        <div>
+            {{ post.content | raw }}
+        </div>
+        <div class="post-meta__date">
+            Posted on <strong>{{ post.published }}</strong>
+        </div>
+
+        {% if post.comments %}
+        <div class="ga-comment-container">
+            <h5 id="hide{{ post.id }}" class="ga-comment-hide">Comments <a href="#hide{{ post.id }}">[expand]</a></h5>
+            <h5 id="show{{ post.id }}" class="ga-comment-show">Comments <a href="#show{{ post.id }}">[collapse]</a></h5>
+            <div class="ga-comment">
+
+                {% for comment in post.comments %}
+                <div class="post post-comments ga-stripe ga-stripe-{{ cycle(['even','odd'],loop.index) }}">
+                    {{ comment.content | raw }}
+                    <p class="icon-comment">
+                        by <a href="{{ comment.author.url }}"><img class="user-image"
+                                                                   style="width: 1.2em; height: 1.2em; vertical-align: bottom;"
+                                                                   src="{{ comment.author.profileImage }}"/>{{
+                        comment.author.displayName }}</a> on <span
+                            class="post-meta__date">{{ comment.published }}</span>
+                    </p>
+                </div>
+                {% endfor %}
+
+            </div>
+        </div>
+        {% endif %}
+
+        <span class="post-list__divider"></span>
+    </div>
+    {% endfor %}
+
+</div>
+
+{% if pagination %}
+<div class="ga-pagination">
+    <div>
+        <strong>
+            {% if pagination.current > 1 %}
+            <a class="pagination__older" href="/view/{{ communityId }}/{{ pagination.prev  }}">&laquo;</a>
+            <a class="pagination__older" href="/view/{{ communityId }}/1">[first]</a>
+            {% endif %}
+            &nbsp;&nbsp;|&nbsp;&nbsp;
+            {% if pagination.current < pagination.last %}
+            <a class="pagination__newer" href="/view/{{ communityId }}/{{ pagination.last }}">[last]</a>
+            <a class="pagination__newer" href="/view/{{ communityId }}/{{ pagination.next }}">&raquo;</a>
+            {% endif %}
+        </strong>
+    </div>
+
+    {% for page in pagination.pages %}
+    {% if page < pagination.current %}
+    <a class="pagination__older" href="/view/{{ communityId }}/{{ page }}">{{ page }}</a>
+    {% elseif page > pagination.current %}
+    <a class="pagination__newer" href="/view/{{ communityId }}/{{ page }}">{{ page }}</a>
+    {% else %}
+    <strong style="margin-left: 1em; margin-right: 1em;">[{{ page }}]</strong>
+    {% endif %}
+    {% endfor %}
+</div>
+{% endif %}
+
+{% endblock %}

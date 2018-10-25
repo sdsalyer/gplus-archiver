@@ -112,7 +112,81 @@ $app->get('/test', function (Request $request, Response $response, array $args) 
     return $response;
 });
 
-$app->get('/download[/{communityId}]', function (Request $request, Response $response, array $args) {
+$app->get('/view/{communityId}[/{pageNum}]', function (Request $request, Response $response, array $args) {
+
+    if (!array_key_exists('communityId', $args)) {
+        $response->getBody()->write('You must supply a community ID.');
+        return $response->withStatus(400);
+    }
+    $communityId = $args['communityId'];
+
+    $pageNum = 1;
+    if (array_key_exists('pageNum', $args)) {
+        $pageNum = $args['pageNum'];;
+    }
+
+    # fetch the community name
+    $name = 'unnamed';
+    $archiveDir = $this->get('settings')['archive_directory'] . DIRECTORY_SEPARATOR . $communityId;
+    $indexFile = $archiveDir . DIRECTORY_SEPARATOR . 'index.txt';
+    if (file_exists($indexFile)) {
+        $name = file_get_contents($indexFile);
+    }
+
+    # Load some data
+    $pageSize = 10;
+    $jsonDir = $archiveDir . DIRECTORY_SEPARATOR . 'json';
+    $jsonIterator = new DirectoryIterator($jsonDir);
+    $numPages = round(iterator_count($jsonIterator) / $pageSize);
+    $jsonIterator->seek($pageSize * ($pageNum - 1));
+
+    $content = array();
+    $fileCount = 0;
+    #foreach ($jsonIterator as $fileInfo) {
+    while ($jsonIterator->valid()) {
+
+        if (!$jsonIterator->isDot()) {
+            $json = file_get_contents($jsonIterator->getRealPath());
+            array_push($content, json_decode($json));
+            $fileCount++;
+        }
+
+        # pagination?
+        if ($pageSize < $fileCount) {
+            break;
+        }
+
+        $jsonIterator->next();
+    }
+
+    # paginate
+    $prev = ($pageNum == 1) ? '' : $pageNum - 1;
+    $next = ($pageNum == $numPages) ? '' : $pageNum + 1;
+    $pages = array();
+    for ($i = 1; $i < $numPages; $i++) {
+        array_push($pages, $i);
+    }
+    $pagination = array(
+        'current' => $pageNum,
+        'last' => $numPages,
+        'prev' => $prev,
+        'next' => $next,
+        'pages' => $pages
+    );
+
+    $output = array(
+        'communityName' => $name,
+        'communityId' => $communityId,
+        'posts' => $content,
+        'pagination' => $pagination
+    );
+
+    $response = $this->view->render($response, 'view.html', $output);
+
+    return $response;
+});
+
+$app->get('/download/{communityId}', function (Request $request, Response $response, array $args) {
 
     if (!array_key_exists('communityId', $args)) {
         $response->getBody()->write('You must supply a community ID.');
