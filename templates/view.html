@@ -63,24 +63,26 @@
             {% if pagination.current > 1 %}
             <a class="pagination__older" href="/view/{{ communityId }}/{{ pagination.prev  }}">&laquo;</a>
             <a class="pagination__older" href="/view/{{ communityId }}/1">[first]</a>
+            ...
             {% endif %}
-            &nbsp;&nbsp;|&nbsp;&nbsp;
+            {% for page in pagination.pages %}
+            {% if page < pagination.current %}
+            <a class="pagination__older" href="/view/{{ communityId }}/{{ page }}">{{ page }}</a>
+            {% elseif page > pagination.current %}
+            <a class="pagination__newer" href="/view/{{ communityId }}/{{ page }}">{{ page }}</a>
+            {% else %}
+            <strong style="margin-left: 1em; margin-right: 1em;">[{{ page }}]</strong>
+            {% endif %}
+            {% endfor %}
             {% if pagination.current < pagination.last %}
+            ...
             <a class="pagination__newer" href="/view/{{ communityId }}/{{ pagination.last }}">[last]</a>
             <a class="pagination__newer" href="/view/{{ communityId }}/{{ pagination.next }}">&raquo;</a>
             {% endif %}
         </strong>
     </div>
 
-    {% for page in pagination.pages %}
-    {% if page < pagination.current %}
-    <a class="pagination__older" href="/view/{{ communityId }}/{{ page }}">{{ page }}</a>
-    {% elseif page > pagination.current %}
-    <a class="pagination__newer" href="/view/{{ communityId }}/{{ page }}">{{ page }}</a>
-    {% else %}
-    <strong style="margin-left: 1em; margin-right: 1em;">[{{ page }}]</strong>
-    {% endif %}
-    {% endfor %}
+
 </div>
 {% endif %}
 

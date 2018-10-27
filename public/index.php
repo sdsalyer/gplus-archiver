@@ -136,36 +136,56 @@ $app->get('/view/{communityId}[/{pageNum}]', function (Request $request, Respons
     # Load some data
     $pageSize = 10;
     $jsonDir = $archiveDir . DIRECTORY_SEPARATOR . 'json';
-    $jsonIterator = new DirectoryIterator($jsonDir);
-    $numPages = round(iterator_count($jsonIterator) / $pageSize);
-    $jsonIterator->seek($pageSize * ($pageNum - 1));
+    $jsonFiles = glob($jsonDir . DIRECTORY_SEPARATOR . '*.json');
+    $fileCount = count($jsonFiles);
+    $numPages = round($fileCount / $pageSize);
+
+    # Reverse sort the list (newest posts first)
+    $posts = array_reverse($jsonFiles);
 
     $content = array();
-    $fileCount = 0;
-    #foreach ($jsonIterator as $fileInfo) {
-    while ($jsonIterator->valid()) {
+    $paginationSize = 1;
+    $seek = $pageSize * ($pageNum - 1);
+    for ($i = $seek; $i < $fileCount; $i++) {
+        $json = file_get_contents($posts[$i]);
+        array_push($content, json_decode($json));
+        $paginationSize++;
 
-        if (!$jsonIterator->isDot()) {
-            $json = file_get_contents($jsonIterator->getRealPath());
-            array_push($content, json_decode($json));
-            $fileCount++;
-        }
-
-        # pagination?
-        if ($pageSize < $fileCount) {
+        # pagination
+        if ($pageSize < $paginationSize) {
             break;
         }
-
-        $jsonIterator->next();
     }
 
     # paginate
     $prev = ($pageNum == 1) ? '' : $pageNum - 1;
     $next = ($pageNum == $numPages) ? '' : $pageNum + 1;
     $pages = array();
-    for ($i = 1; $i < $numPages; $i++) {
+    for ($i = 1; $i <= $numPages; $i++) {
         array_push($pages, $i);
     }
+
+    # TODO: this isn't quite right...
+    # slice the page numbers up to only show a few
+    # << first ... 51, 52, [53], 54, 55 ... last >>
+    $keep = 2;
+    if ($numPages > ($keep * 2 + 1)) {
+
+        $first = array();
+        if ($pageNum > $keep) {
+            # keep the first few
+            $first = array_slice($pages, $pageNum - 1 - $keep, $keep);
+        }
+
+        # Add an elipsis
+        array_push($first, $pageNum);
+
+        # Keep the last few
+        $last = array_slice($pages, $pageNum, $keep);
+
+        $pages = array_merge($first, $last);
+    }
+
     $pagination = array(
         'current' => $pageNum,
         'last' => $numPages,
