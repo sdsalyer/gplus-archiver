@@ -16,13 +16,41 @@
     {% for post in posts %}
     <div class="ga-post">
         <h3><a href="{{ post.url }}">{{ post.title }}</a></h3>
-        <h4 class="post-meta__author"><a href="{{ post.author.url }}"><img class="user-image"
-                                                                           style="width: 1.2em; height: 1.2em; vertical-align: bottom;"
-                                                                           src="{{ post.author.profileImage }}"/>{{
+        <h4 class="post-meta__author"><a href="{{ post.author.url }}"><img
+                style="width: 1.2em; height: 1.2em; vertical-align: bottom;" src="{{ post.author.profileImage }}"/> {{
             post.author.displayName }}</a></h4>
+        <div class="post-meta__tags">
+            Posted to <strong>{{ post.category }}</strong>
+        </div>
         <div>
             {{ post.content | raw }}
         </div>
+        {% if post.attachments %}
+        <div class="container post-meta"
+             style="width: 80%; margin-left: auto; margin-right: auto; text-align: center; border: 1px solid darkgray; border-left: 4px solid darkgray; border-bottom: 4px solid darkgray; padding-left: 2em;">
+            {% for attachment in post.attachments %}
+            <a href="{{ attachment.url }}"><h4>{{ attachment.displayName }}</h4></a>
+            {#
+            Handle attachments by type...
+            Possible values include, but are not limited to, the following values:
+            "photo" - A photo.
+            "album" - A photo album.
+            "video" - A video.
+            "article" - An article, specified by a link.
+            #}
+            {% if attachment.objectType == "album" %}
+            {% for thumb in attachment.thumbnails %}
+            <a href="{{ thumb.url }}"><img src="{{ thumb.image.url }}" class="pure-img-responsive"
+                                           style="max-height: 8em; border: 4px solid darkgray"/></a>
+            {% endfor %}
+            {% else %}
+            <a href="{{ attachment.url }}"><img src="{{ attachment.image.url }}" class="pure-img-responsive"/></a>
+            {% endif %}
+            <p style="text-align: left">{{ attachment.content }}</p>
+            </a>
+            {% endfor %}
+        </div>
+        {% endif %}
         <div class="post-meta__date">
             Posted on <strong>{{ post.published }}</strong>
         </div>
@@ -36,12 +64,12 @@
                 {% for comment in post.comments %}
                 <div class="post post-comments ga-stripe ga-stripe-{{ cycle(['even','odd'],loop.index) }}">
                     {{ comment.content | raw }}
-                    <p class="icon-comment">
+                    <p class="icon icon-comment">
                         by <a href="{{ comment.author.url }}"><img class="user-image"
                                                                    style="width: 1.2em; height: 1.2em; vertical-align: bottom;"
                                                                    src="{{ comment.author.profileImage }}"/>{{
-                        comment.author.displayName }}</a> on <span
-                            class="post-meta__date">{{ comment.published }}</span>
+                        comment.author.displayName }}</a>
+                        on <span class="post-meta__date">{{ comment.published }}</span>
                     </p>
                 </div>
                 {% endfor %}
